@@ -3,6 +3,7 @@ from functools import partial
 
 from lark import Tree
 
+from ..common.utils import get_line, get_end_line
 from .types import FormattedLines, Outcome
 from .context import Context, ExpressionContext
 from .block import format_block
@@ -10,16 +11,14 @@ from .function_statement import format_func_statement
 from .statement_utils import format_simple_statement
 from .var_statement import format_var_statement
 from .expression_to_str import expression_to_str
-from .expression import (
-    format_expression,
-    format_concrete_expression,
-)
+from .expression import format_concrete_expression
 from .annotation import format_standalone_annotation
 from .property import (
     has_inline_property_body,
     append_property_body_to_formatted_line,
     format_property_body,
 )
+from .const_statement import format_const_statement
 
 
 def format_class_statement(statement: Tree, context: Context) -> Outcome:
@@ -31,11 +30,15 @@ def format_class_statement(statement: Tree, context: Context) -> Outcome:
         "classname_stmt": _format_classname_statement,
         "classname_extends_stmt": _format_classname_extends_statement,
         "class_var_stmt": _format_var_statement,
-        "const_stmt": _format_const_statement,
+        "static_class_var_stmt": lambda s, c: _format_var_statement(
+            s.children[0], c, "static "
+        ),
+        "const_stmt": format_const_statement,
+        "docstr_stmt": _format_docstring_statement,
         "class_def": _format_class_statement,
         "func_def": _format_func_statement,
-        "static_func_def": partial(
-            _format_child_and_prepend_to_outcome, prefix="static "
+        "static_func_def": lambda s, c: _format_func_statement(
+            s.children[0], c, "static "
         ),
         "annotation": format_standalone_annotation,
         "property_body_def": format_property_body,
@@ -43,68 +46,34 @@ def format_class_statement(statement: Tree, context: Context) -> Outcome:
     return handlers[statement.data](statement, context)
 
 
-def _format_child_and_prepend_to_outcome(
-    statement: Tree, context: Context, prefix: str
-) -> Outcome:
-    lines, last_processed_line = format_class_statement(statement.children[0], context)
-    first_line_no, first_line = lines[0]
-    return (
-        [
-            (
-                first_line_no,
-                "{}{}{}".format(context.indent_string, prefix, first_line.strip()),
-            )
-        ]
-        + lines[1:],
-        last_processed_line,
-    )
-
-
-def _format_const_statement(statement: Tree, context: Context) -> Outcome:
-    if len(statement.children) == 4:
-        prefix = "const {} = ".format(statement.children[1].value)
-    elif len(statement.children) == 5:
-        prefix = "const {} := ".format(statement.children[1].value)
-    elif len(statement.children) == 6:
-        prefix = "const {}: {} = ".format(
-            statement.children[1].value, statement.children[3].value
-        )
-    expression_context = ExpressionContext(
-        prefix, statement.line, "", statement.end_line
-    )
-    return format_expression(statement.children[-1], expression_context, context)
-
-
 def _format_signal_statement(statement: Tree, context: Context) -> Outcome:
     if len(statement.children) == 1 or len(statement.children[1].children) == 0:
         return format_simple_statement(
-            "signal {}".format(statement.children[0].value), statement, context
+            f"signal {statement.children[0].value}", statement, context
         )
     expression_context = ExpressionContext(
-        "signal {}".format(statement.children[0].value),
-        statement.line,
+        f"signal {statement.children[0].value}",
+        get_line(statement),
         "",
-        statement.end_line,
+        get_end_line(statement),
     )
     signal_args = statement.children[-1]
     return format_concrete_expression(signal_args, expression_context, context)
 
 
 def _format_classname_statement(statement: Tree, context: Context) -> Outcome:
-    last_processed_line_no = statement.line
+    last_processed_line_no = get_line(statement)
     formatted_lines: FormattedLines = [
         (
-            statement.line,
-            "{}class_name {}".format(
-                context.indent_string, statement.children[0].value
-            ),
+            get_line(statement),
+            f"{context.indent_string}class_name {statement.children[0].value}",
         )
     ]
     return (formatted_lines, last_processed_line_no)
 
 
 def _format_extends_statement(statement: Tree, context: Context) -> Outcome:
-    last_processed_line_no = statement.line
+    last_processed_line_no = get_line(statement)
     optional_attributes = (
         ""
         if len(statement.children) == 1
@@ -114,7 +83,7 @@ def _format_extends_statement(statement: Tree, context: Context) -> Outcome:
     )
     formatted_lines: FormattedLines = [
         (
-            statement.line,
+            get_line(statement),
             "{}extends {}{}".format(
                 context.indent_string,
                 expression_to_str(statement.children[0]),
@@ -126,7 +95,7 @@ def _format_extends_statement(statement: Tree, context: Context) -> Outcome:
 
 
 def _format_classname_extends_statement(statement: Tree, context: Context) -> Outcome:
-    last_processed_line_no = statement.line
+    last_processed_line_no = get_line(statement)
     extendee_pos = 2 + 1
     optional_attributes = (
         ""
@@ -142,7 +111,7 @@ def _format_classname_extends_statement(statement: Tree, context: Context) -> Ou
     )
     formatted_lines: FormattedLines = [
         (
-            statement.line,
+            get_line(statement),
             "{}class_name {} extends {}{}".format(
                 context.indent_string,
                 statement.children[1].value,
@@ -154,8 +123,12 @@ def _format_classname_extends_statement(statement: Tree, context: Context) -> Ou
     return (formatted_lines, last_processed_line_no)
 
 
-def _format_var_statement(statement: Tree, context: Context) -> Outcome:
-    formatted_lines, last_processed_line = format_var_statement(statement, context)
+def _format_var_statement(
+    statement: Tree, context: Context, prefix: str = ""
+) -> Outcome:
+    formatted_lines, last_processed_line = format_var_statement(
+        statement, context, prefix
+    )
     concrete_var_statement = statement.children[0]
     if has_inline_property_body(concrete_var_statement):
         inline_property_body = concrete_var_statement.children[-1]
@@ -165,11 +138,20 @@ def _format_var_statement(statement: Tree, context: Context) -> Outcome:
     return formatted_lines, last_processed_line
 
 
+def _format_docstring_statement(statement: Tree, context: Context) -> Outcome:
+    expression_context = ExpressionContext(
+        "", get_line(statement), "", get_end_line(statement)
+    )
+    return format_concrete_expression(
+        statement.children[0], expression_context, context
+    )
+
+
 def _format_class_statement(statement: Tree, context: Context) -> Outcome:
-    last_processed_line_no = statement.line
+    last_processed_line_no = get_line(statement)
     name = statement.children[0].value
     formatted_lines: FormattedLines = [
-        (statement.line, "{}class {}:".format(context.indent_string, name))
+        (get_line(statement), f"{context.indent_string}class {name}:")
     ]
     class_lines, last_processed_line_no = format_block(
         statement.children[1:],
@@ -180,9 +162,13 @@ def _format_class_statement(statement: Tree, context: Context) -> Outcome:
     return (formatted_lines, last_processed_line_no)
 
 
-def _format_func_statement(statement: Tree, context: Context) -> Outcome:
+def _format_func_statement(
+    statement: Tree, context: Context, prefix: str = ""
+) -> Outcome:
     func_header = statement.children[0]
-    formatted_lines, last_processed_line_no = _format_func_header(func_header, context)
+    formatted_lines, last_processed_line_no = _format_func_header(
+        func_header, context, prefix
+    )
     func_lines, last_processed_line_no = format_block(
         statement.children[1:],
         format_func_statement,
@@ -192,14 +178,14 @@ def _format_func_statement(statement: Tree, context: Context) -> Outcome:
     return (formatted_lines, last_processed_line_no)
 
 
-def _format_func_header(statement: Tree, context: Context) -> Outcome:
+def _format_func_header(statement: Tree, context: Context, prefix: str) -> Outcome:
     name = statement.children[0].value
     has_return_type = len(statement.children) > 2
     expression_context = ExpressionContext(
-        f"func {name}",
-        statement.line,
+        f"{prefix}func {name}",
+        get_line(statement),
         f" -> {statement.children[2].value}:" if has_return_type else ":",
-        statement.end_line,
+        get_end_line(statement),
     )
     func_args = statement.children[1]
     return format_concrete_expression(func_args, expression_context, context)
@@ -208,12 +194,12 @@ def _format_func_header(statement: Tree, context: Context) -> Outcome:
 def _format_enum_statement(statement: Tree, context: Context) -> Outcome:
     actual_enum = statement.children[0]
     prefix = (
-        "enum {} ".format(actual_enum.children[0].value)
+        f"enum {actual_enum.children[0].value} "
         if len(actual_enum.children) == 2
         else "enum "
     )
     expression_context = ExpressionContext(
-        prefix, statement.line, "", statement.end_line
+        prefix, get_line(statement), "", get_end_line(statement)
     )
     enum_body = actual_enum.children[-1]
     return format_concrete_expression(enum_body, expression_context, context)

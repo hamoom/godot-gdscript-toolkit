@@ -2,19 +2,36 @@ from typing import List, Optional
 
 from lark import Tree
 
+from ..common.utils import get_line, get_end_line
 from .types import FormattedLine, FormattedLines, Outcome
 from .context import Context, ExpressionContext
 from .expression import format_concrete_expression
 from .expression_to_str import expression_to_str
 
-STANDALONE_ANNOTATIONS = ["tool", "icon"]
+_STANDALONE_ANNOTATIONS = [
+    "export_category",
+    "export_group",
+    "export_subgroup",
+    "icon",
+    "tool",
+]
+_NON_STANDALONE_WARNING_IGNORES = [
+    "unused_parameter",
+]
 
 
 def is_non_standalone_annotation(statement: Tree) -> bool:
     if statement.data != "annotation":
         return False
     name = statement.children[0].value
-    return name not in STANDALONE_ANNOTATIONS
+    if name in _STANDALONE_ANNOTATIONS:
+        return False
+    if name != "warning_ignore":
+        return True
+    ignoree = statement.children[1].children[0].children[0].value.strip('"')
+    if ignoree in _NON_STANDALONE_WARNING_IGNORES:
+        return True
+    return False
 
 
 def prepend_annotations_to_formatted_line(
@@ -28,11 +45,15 @@ def prepend_annotations_to_formatted_line(
     single_line_length = (
         context.indent + len(annotations_string) + len(whitelineless_line)
     )
+    standalone_formatting_enforced = whitelineless_line.startswith(
+        "func"
+    ) or whitelineless_line.startswith("static func")
     if (
         not _annotations_have_standalone_comments(
             context.annotations, context.standalone_comments, line_to_prepend_to[0]
         )
         and single_line_length <= context.max_line_length
+        and not standalone_formatting_enforced
     ):
         single_line = "{}{} {}".format(
             context.indent_string, annotations_string, whitelineless_line
@@ -50,7 +71,7 @@ def prepend_annotations_to_formatted_line(
 
 def format_standalone_annotation(annotation: Tree, context: Context) -> Outcome:
     return format_concrete_expression(
-        annotation, ExpressionContext("", annotation.line, "", -1), context
+        annotation, ExpressionContext("", get_line(annotation), "", -1), context
     )
 
 
@@ -66,8 +87,8 @@ def _annotations_have_standalone_comments(
     return any(
         comment is not None
         for comment in standalone_comments[
-            annotations[0].line : last_line
-            if last_line is not None
-            else annotations[-1].end_line
+            get_line(annotations[0]) : (
+                last_line if last_line is not None else get_end_line(annotations[-1])
+            )
         ]
     )

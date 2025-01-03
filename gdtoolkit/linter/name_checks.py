@@ -5,7 +5,7 @@ from types import MappingProxyType
 
 from lark import Tree
 
-from ..common.utils import find_name_token_among_children
+from ..common.utils import find_name_token_among_children, get_line, get_column
 
 from .problem import Problem
 
@@ -22,6 +22,7 @@ def lint(parse_tree: Tree, config: MappingProxyType) -> List[Problem]:
             "enum_named",
             "enum_element",
             "for_stmt",
+            "for_stmt_typed",
             "func_arg_regular",
             "func_arg_inf",
             "func_arg_typed",
@@ -93,7 +94,7 @@ def lint(parse_tree: Tree, config: MappingProxyType) -> List[Problem]:
             partial(
                 _generic_name_check,
                 config["loop-variable-name"],
-                rule_name_tokens["for_stmt"],
+                rule_name_tokens["for_stmt"] + rule_name_tokens["for_stmt_typed"],
                 "loop-variable-name",
                 'Loop variable name "{}" is not valid',
             ),
@@ -214,8 +215,8 @@ def _generic_name_check(
                 Problem(
                     name=problem_name,
                     description=description_template.format(name),
-                    line=name_token.line,
-                    column=name_token.column,
+                    line=get_line(name_token),
+                    column=get_column(name_token),
                 )
             )
     return problems

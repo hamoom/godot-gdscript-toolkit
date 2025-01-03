@@ -7,17 +7,9 @@ import os
 import sys
 import pkg_resources
 
-from lark import Lark, Tree, indenter
+from lark import Lark, Tree
 
-
-class Indenter(indenter.Indenter):
-    NL_type = "_NL"
-    OPEN_PAREN_types = ["LPAR", "LSQB", "LBRACE"]
-    CLOSE_PAREN_types = ["RPAR", "RSQB", "RBRACE"]
-    INDENT_type = "_INDENT"
-    DEDENT_type = "_DEDENT"
-    # TODO: guess tab length
-    tab_len = 4
+from .gdscript_indenter import GDScriptIndenter
 
 
 # TODO: when upgrading to Python 3.8, replace with functools.cached_property
@@ -54,11 +46,14 @@ class Parser:
         If gather_metadata is True, parsing is slower but the returned Tree comes with
         line and column numbers for statements and rules.
         """
+        # adding newline at the end of code
+        # workarounds a few corner cases not addressed in the grammar
+        adjusted_code = code + "\n"
         # pylint: disable=no-member
         return (
-            self._parser_with_metadata.parse(code)
+            self._parser_with_metadata.parse(adjusted_code)
             if gather_metadata
-            else self._parser.parse(code)
+            else self._parser.parse(adjusted_code)
         )
 
     def parse_comments(self, code: str) -> Tree:
@@ -89,10 +84,11 @@ class Parser:
             grammar_filepath,
             parser="lalr",
             start="start",
-            postlex=Indenter(),  # type: ignore
+            postlex=GDScriptIndenter(),  # type: ignore
             propagate_positions=add_metadata,
             maybe_placeholders=False,
             cache=cache_filepath,
+            regex=True,
         )
 
         return a_parser

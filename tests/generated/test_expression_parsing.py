@@ -1,3 +1,5 @@
+import re
+
 import pytest
 import hypothesis.extra.lark
 from hypothesis import settings, given, HealthCheck
@@ -16,6 +18,18 @@ with open("gdtoolkit/parser/gdscript.lark", "r", encoding="utf-8") as handle:
         '["+"] atom',
         '["+"] " " atom " "',
     )
+    # hypothesis does not support the \p syntax
+    simplified_gdscript_grammar = re.sub(
+        r"NAME:.*$",
+        r"%import common.CNAME -> NAME",
+        simplified_gdscript_grammar,
+        flags=re.MULTILINE,
+    )
+    print(simplified_gdscript_grammar)
+    for keyword in ["as", "not", "await", "and", "else", "if", "or", "in"]:
+        simplified_gdscript_grammar = simplified_gdscript_grammar.replace(
+            f'"{keyword}"', f'" {keyword} "'
+        )
     simplified_gdscript_grammar = simplified_gdscript_grammar.replace("TYPE:", "XTYPE:")
     simplified_gdscript_grammar = simplified_gdscript_grammar.replace(
         "%ignore WS_INLINE", 'TYPE: " " XTYPE " "'
@@ -23,7 +37,7 @@ with open("gdtoolkit/parser/gdscript.lark", "r", encoding="utf-8") as handle:
     simplified_gdscript_grammar = simplified_gdscript_grammar.replace(
         "%ignore COMMENT", ""
     )
-    gdscript_lark = Lark(simplified_gdscript_grammar)
+    gdscript_lark = Lark(simplified_gdscript_grammar, regex=True)
 
 
 def format_and_check_safety(input_code):
@@ -34,7 +48,7 @@ def format_and_check_safety(input_code):
 @pytest.mark.generated
 @settings(
     deadline=None,
-    suppress_health_check=(HealthCheck.filter_too_much,),
+    suppress_health_check=(HealthCheck.filter_too_much, HealthCheck.too_slow),
     max_examples=500,
 )
 @given(hypothesis.extra.lark.from_lark(gdscript_lark, start="expr"))  # type: ignore
@@ -47,7 +61,7 @@ def test_expression_parsing(expression):
 @pytest.mark.generated
 @settings(
     deadline=None,
-    suppress_health_check=(HealthCheck.filter_too_much,),
+    suppress_health_check=(HealthCheck.filter_too_much, HealthCheck.too_slow),
     max_examples=500,
 )
 @given(hypothesis.extra.lark.from_lark(gdscript_lark, start="expr"))  # type: ignore

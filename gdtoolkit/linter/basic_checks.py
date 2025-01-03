@@ -3,7 +3,8 @@ from typing import Dict, List, Set
 
 from lark import Tree, Token
 
-from ..common.utils import find_name_token_among_children
+from ..common.utils import find_name_token_among_children, get_line, get_column
+from ..formatter.expression_utils import remove_outer_parentheses, is_trailing_comma
 
 from .problem import Problem
 
@@ -51,8 +52,8 @@ def _unnecessary_pass_check(parse_tree: Tree) -> List[Problem]:
                         Problem(
                             name="unnecessary-pass",
                             description='"pass" statement not necessary',
-                            line=pass_stmt.line,
-                            column=pass_stmt.column,
+                            line=get_line(pass_stmt),
+                            column=get_column(pass_stmt),
                         )
                     )
     return problems
@@ -62,12 +63,14 @@ def _expression_not_assigned_check(parse_tree: Tree) -> List[Problem]:
     problems = []
     for expr_stmt in parse_tree.find_data("expr_stmt"):
         expr = expr_stmt.children[0]
-        child = expr.children[0]
-        if not isinstance(child, Tree) or child.data not in [
+        actual_expression = remove_outer_parentheses(expr.children[0])
+        if not isinstance(actual_expression, Tree) or actual_expression.data not in [
             "assnmnt_expr",
+            "await_expr",
             "standalone_call",
             "getattr_call",
             "string",
+            "lambda",
         ]:
             problems.append(
                 Problem(
@@ -75,8 +78,8 @@ def _expression_not_assigned_check(parse_tree: Tree) -> List[Problem]:
                     description=(
                         "expression is not asigned, and hence it can be removed"
                     ),
-                    line=child.line,
-                    column=child.column,
+                    line=get_line(actual_expression),
+                    column=get_column(actual_expression),
                 )
             )
     return problems
@@ -86,7 +89,7 @@ def _duplicated_load_check(parse_tree: Tree) -> List[Problem]:
     problems = []
     loaded_strings: Set[str] = set()
     for call in sorted(
-        parse_tree.find_data("standalone_call"), key=lambda rule: rule.line
+        parse_tree.find_data("standalone_call"), key=lambda rule: rule.meta.line
     ):
         name_token = call.children[0]
         callee_name = name_token.value
@@ -103,8 +106,8 @@ def _duplicated_load_check(parse_tree: Tree) -> List[Problem]:
                     Problem(
                         name="duplicated-load",
                         description="duplicated loading of {}".format(loaded_string),
-                        line=string_rule.line,
-                        column=string_rule.column,
+                        line=get_line(string_rule),
+                        column=get_column(string_rule),
                     )
                 )
             else:
@@ -125,9 +128,9 @@ def _unused_argument_check(parse_tree: Tree) -> List[Problem]:
             argument_definitions = {}  # type: Dict[str, int]
             argument_tokens = {}
             func_args = func_header.children[1]
-            for func_arg in func_args.children:
+            for func_arg in [r for r in func_args.children if not is_trailing_comma(r)]:
                 arg_name_token = find_name_token_among_children(func_arg)
-                arg_name = arg_name_token.value
+                arg_name = arg_name_token.value  # type: ignore
                 argument_definitions[arg_name] = (
                     argument_definitions.get(arg_name, 0) + 1
                 )
@@ -148,8 +151,8 @@ def _unused_argument_check(parse_tree: Tree) -> List[Problem]:
                             description="unused function argument '{}'".format(
                                 argument
                             ),
-                            line=argument_tokens[argument].line,
-                            column=argument_tokens[argument].column,
+                            line=get_line(argument_tokens[argument]),  # type: ignore
+                            column=get_column(argument_tokens[argument]),  # type: ignore
                         )
                     )
     return problems
@@ -164,8 +167,8 @@ def _comparison_with_itself_check(parse_tree: Tree) -> List[Problem]:
                 Problem(
                     name="comparison-with-itself",
                     description="Redundant comparison",
-                    line=comparison.line,
-                    column=comparison.column,
+                    line=get_line(comparison),
+                    column=get_column(comparison),
                 )
             )
     return problems

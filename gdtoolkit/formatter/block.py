@@ -4,10 +4,11 @@ from typing import List, Callable
 
 from lark import Tree
 
+from ..common.utils import get_line
 from .types import Outcome, FormattedLines
 from .context import Context
 from .constants import (
-    INDENT_SIZE,
+    TAB_INDENT_SIZE,
     DEFAULT_SURROUNDING_EMPTY_LINES_TABLE as DEFAULT_SURROUNDINGS_TABLE,
 )
 from .annotation import (
@@ -32,7 +33,7 @@ def format_block(
             if not is_first_annotation:
                 continue
         blank_lines = reconstruct_blank_lines_in_range(
-            previously_processed_line_number, statement.line, context
+            previously_processed_line_number, get_line(statement), context
         )
         if previous_statement_name is None:
             blank_lines = _remove_empty_strings_from_begin(blank_lines)
@@ -108,7 +109,7 @@ def _find_dedent_line_number(
         if (
             line.startswith("\t")
             and re.search(
-                r"^\t{0,%d}[^\t]+" % ((context.indent / INDENT_SIZE) - 1), line
+                r"^\t{0,%d}[^\t]+" % ((context.indent / TAB_INDENT_SIZE) - 1), line
             )
             is not None
         ):

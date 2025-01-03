@@ -14,13 +14,14 @@ from .exceptions import (
 )
 
 
+# pylint: disable-next=too-many-public-methods
 class LoosenTreeTransformer(Transformer):
     def par_expr(self, args):
         return args[0] if len(args) > 0 else args
 
     def asless_actual_neg_expr(self, args):
         return (
-            Token("NUMBER", "-{}".format(args[1].value))
+            Token("NUMBER", f"-{args[1].value}")
             if isinstance(args[1], Token) and args[1].type == "NUMBER"
             else Tree("asless_actual_neg_expr", args)
         )
@@ -61,9 +62,19 @@ class LoosenTreeTransformer(Transformer):
     def asless_mdr_expr(self, args):
         return Tree("mdr_expr", args)
 
+    def asless_pow_expr(self, args):
+        return Tree("pow_expr", args)
+
     def string(self, args):
         string_token = args[0]
         return expression_to_str(string_token)
+
+    def rstring(self, args):
+        string_token = args[0]
+        return expression_to_str(string_token)
+
+    def par_pattern(self, args):
+        return args[0] if len(args) > 0 else args
 
     def signal_stmt(self, args):
         if len(args) > 1 and len(args[1].children) == 0:
@@ -132,12 +143,14 @@ def check_formatting_stability(
     max_line_length: int,
     parse_tree: Optional[Tree] = None,
     comment_parse_tree: Optional[Tree] = None,
+    spaces_for_indent: Optional[int] = None,
 ) -> None:
     code_formatted_again = format_code(
         formatted_code,
         max_line_length,
         parse_tree=parse_tree,
         comment_parse_tree=comment_parse_tree,
+        spaces_for_indent=spaces_for_indent,
     )
     if formatted_code != code_formatted_again:
         diff = "\n".join(

@@ -1,11 +1,8 @@
 # GDScript Toolkit
-[![](https://github.com/Scony/godot-gdscript-toolkit/workflows/Tests/badge.svg?branch=master)](https://github.com/Scony/godot-gdscript-toolkit/actions)
+[![](https://github.com/Scony/godot-gdscript-toolkit/workflows/Tests/badge.svg)](https://github.com/Scony/godot-gdscript-toolkit/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-
-```diff
-- The `master` branch contains Godot 4.0 support now - please note it's in alpha phase
-```
+[![Buy me a coffe](https://img.shields.io/badge/Buy%20me%20a%20coffe-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/pawel_lampe)
 
 This project provides a set of tools for daily work with `GDScript`. At the moment it provides:
 
@@ -16,17 +13,32 @@ This project provides a set of tools for daily work with `GDScript`. At the mome
 
 ## Installation
 
-To install this project you need `python3` and `pip`. 
+To install this project you need `python3` and `pip`.
+Regardless of the target version, installation is done by `pip3` command and for stable releases, it downloads the package from PyPI.
 
-Use this command to install `gdtoolkit` for `Godot 3` from PyPI repository:
+### Godot 4
 
 ```
-pip3 install 'gdtoolkit==3.*'
+pip3 install "gdtoolkit==4.*"
+# or
+pipx install "gdtoolkit==4.*"
 ```
 
-Alternatively, you can install latest `gdtoolkit` for `Godot 4` (potentially unstable) directly from git:
+### Godot 3
+
+```
+pip3 install "gdtoolkit==3.*"
+# or
+pipx install "gdtoolkit==3.*"
+```
+
+### `master` (latest)
+
+Latest version (potentially unstable) can be installed directly from git:
 ```
 pip3 install git+https://github.com/Scony/godot-gdscript-toolkit.git
+# or
+pipx install git+https://github.com/Scony/godot-gdscript-toolkit.git
 ```
 
 ## Linting with gdlint [(more)](https://github.com/Scony/godot-gdscript-toolkit/wiki/3.-Linter)
@@ -127,6 +139,32 @@ tests/gd2py/input-output-pairs/class-level-statements.in.gd
 tests/gd2py/input-output-pairs/func-level-statements.in.gd
     F 1:0 foo - B (8)
 ```
+
+## Using gdtoolkit's GitHub action
+
+In order to setup a simple action with gdtoolkit's static checks, the base action from this repo can be used:
+
+```
+name: Static checks
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  static-checks:
+    name: 'Static checks'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: Scony/godot-gdscript-toolkit@master
+    - run: gdformat --check source/
+    - run: gdlint source/
+```
+
+See the discussion in https://github.com/Scony/godot-gdscript-toolkit/issues/239 for more details.
 
 ## Development [(more)](https://github.com/Scony/godot-gdscript-toolkit/wiki/5.-Development)
 
